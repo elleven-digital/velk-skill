@@ -1,0 +1,13 @@
+{
+  "name": "velk",
+  "version": "1.5.0",
+  "description": "Build, deploy and maintain Velk CMS sites: the site.json schema, themes and templates, installs and engine upgrades, and deploys, content edits and backups over SSH (rsync, mysqldump) to the servers you configure.",
+  "author": {
+    "name": "Elleven Digital",
+    "url": "https://elleven.digital"
+  },
+  "homepage": "https://velkcms.com",
+  "repository": "https://github.com/elleven-digital/velk-skill",
+  "license": "MIT",
+  "keywords": ["velk", "cms", "php", "mysql", "themes", "deploy", "ssh"]
+}

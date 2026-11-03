@@ -1,0 +1,12 @@
+#!/bin/bash
+# Fake curl: https://site.test/... answers with the status in
+# FAKE_HTTP_STATUS_FILE; anything else (file:// releases) goes to the real curl.
+for a in "$@"; do
+    case "$a" in
+        https://site.test*|http://site.test*)
+            echo "curl ${a}" >> "${FAKE_CALLS:-/dev/null}"
+            printf '%s' "$(cat "$FAKE_HTTP_STATUS_FILE")"
+            exit 0 ;;
+    esac
+done
+exec /usr/bin/curl "$@"

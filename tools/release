@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+#
+# tools/release — publica a skill do Velk no endpoint público R2.
+#
+# Empacota um tarball IMUTÁVEL da skill a partir do commit da TAG, calcula o
+# sha256, regenera o versions.json e sobe os três artefatos. A instalação
+# pelo pacote não depende do GitHub: a distribuição vive inteira no R2.
+# (Quem instala pelo plugin recebe direto do repositório; ver PUBLICAR.md.)
+#
+# Mesmo formato do bin/release do engine, de propósito: quem já entende um
+# entende o outro. Mas são projetos separados — bucket próprio, versão
+# própria, ciclo próprio. Publicar a skill não encosta em nada do CMS.
+#
+# Uso:
+#   tools/release [version] [--dry-run]
+#     version    ex.: v1.1.0  (default: conteúdo de VERSION)
+#     --dry-run  gera tudo em dist/, mas NÃO sobe nada
+#
+# Requisitos:
+#   sempre:  git, jq, tar, gzip, shasum (ou sha256sum)
+#   upload:  aws CLI (S3-compatível, contra o endpoint do R2)
+#
+# Credenciais — um .release.env gitignored na raiz do repo:
+#   R2_ENDPOINT="https://<accountid>.r2.cloudflarestorage.com"
+#   R2_BUCKET="velk-skill"
+#   RELEASE_BASE_URL="https://skill.velkcms.com"
+#   AWS_ACCESS_KEY_ID="..."
+#   AWS_SECRET_ACCESS_KEY="..."
+#   AWS_DEFAULT_REGION="auto"
+#
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# ── o que vai no tarball ────────────────────────────────────────────────────
+# A pasta plugin/ da tag, inteira e nada mais: é o mesmo que o plugin entrega.
+# tests/, tools/, dist/ e .release.env ficam na raiz do repositório e não têm
+# o que fazer na máquina de ninguém. O .claude-plugin/ vai junto: numa pasta de
+# ~/.claude/skills ele faz a cópia carregar como plugin (velk@skills-dir), que
+# cede o lugar sozinha a uma instalação pelo marketplace.
+
+DRY_RUN=0
+VERSION=""
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    -*) echo "flag desconhecida: $arg" >&2; exit 2 ;;
+    *) VERSION="$arg" ;;
+  esac
+done
+[ -z "$VERSION" ] && VERSION="$(tr -d '[:space:]' < VERSION)"
+
+RELEASE_BASE_URL="https://skill.velkcms.com"
+set -a
+# shellcheck disable=SC1091
+[ -f .release.env ] && source .release.env
+set +a
+
+for tool in git jq tar gzip; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "ferramenta obrigatória faltando: $tool" >&2; exit 1; }
+done
+if command -v shasum >/dev/null 2>&1; then
+  sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
+else
+  sha256() { sha256sum "$1" | awk '{print $1}'; }
+fi
+
+git rev-parse "$VERSION" >/dev/null 2>&1 || {
+  echo "tag $VERSION não existe — crie e faça push antes de publicar" >&2; exit 1; }
+
+# O plugin.json da tag precisa dizer a mesma versão: quem instalou pelo
+# plugin só recebe uma atualização quando o "version" de lá muda.
+PLUGIN_VERSION="$(git show "$VERSION:plugin/.claude-plugin/plugin.json" 2>/dev/null | jq -r '.version // empty' || true)"
+[ "v${PLUGIN_VERSION}" = "$VERSION" ] || {
+  echo "plugin/.claude-plugin/plugin.json na tag $VERSION diz \"${PLUGIN_VERSION:-sem versão}\" — atualize o VERSION e o plugin.json juntos" >&2; exit 1; }
+
+# ── empacotar a partir da TAG, não do working-tree ──────────────────────────
+# Garante que o publicado é exatamente o que está versionado: um arquivo
+# esquecido em aberto no editor não vaza para dentro do pacote.
+mkdir -p dist
+TARBALL="dist/velk-skill-$VERSION.tar.gz"
+git archive --format=tar --prefix="velk-skill-$VERSION/" "$VERSION:plugin" | gzip > "$TARBALL"
+echo "construído $TARBALL"
+
+SHA256="$(sha256 "$TARBALL")"
+echo "sha256 $SHA256"
+
+RELEASED="$(date -u +%Y-%m-%d)"
+# A lista publicada é a fonte da verdade. Se não der para lê-la, para aqui:
+# seguir com uma lista vazia publicaria só esta versão e apagaria as outras.
+CURRENT="$(curl -fsSL --max-time 10 "$RELEASE_BASE_URL/versions.json")" || {
+  echo "não consegui ler $RELEASE_BASE_URL/versions.json — nada foi publicado; tente de novo" >&2; exit 1; }
+echo "$CURRENT" | jq -e '.versions | type == "array"' >/dev/null 2>&1 || {
+  echo "$RELEASE_BASE_URL/versions.json não tem a lista de versões — nada foi publicado" >&2; exit 1; }
+echo "$CURRENT" | jq \
+  --arg v "$VERSION" \
+  --arg url "$RELEASE_BASE_URL/velk-skill-$VERSION.tar.gz" \
+  --arg sha "$SHA256" \
+  --arg date "$RELEASED" \
+  '{
+     versions: ([{version:$v, url:$url, sha256:$sha, released:$date}]
+                + ((.versions // []) | map(select(.version != $v)))),
+     latest: $v
+   }' > dist/versions.json
+echo "gerado dist/versions.json (latest=$VERSION)"
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo ""
+  echo "DRY RUN — nada enviado. Subiria para s3://${R2_BUCKET:-<bucket>}/:"
+  echo "  velk-skill-$VERSION.tar.gz   (immutable)"
+  echo "  velk-skill-latest.tar.gz     (max-age=300)"
+  echo "  versions.json                (max-age=60)"
+  echo "  index.html                   (max-age=300)"
+  exit 0
+fi
+
+: "${R2_ENDPOINT:?defina R2_ENDPOINT no .release.env}"
+: "${R2_BUCKET:?defina R2_BUCKET no .release.env}"
+command -v aws >/dev/null 2>&1 || { echo "aws CLI não encontrado" >&2; exit 1; }
+
+s3cp() { aws s3 cp --endpoint-url "$R2_ENDPOINT" "$@"; }
+s3cp "$TARBALL" "s3://$R2_BUCKET/velk-skill-$VERSION.tar.gz" --cache-control "public, max-age=31536000, immutable"
+s3cp "$TARBALL" "s3://$R2_BUCKET/velk-skill-latest.tar.gz"   --cache-control "public, max-age=300"
+s3cp dist/versions.json "s3://$R2_BUCKET/versions.json" --cache-control "public, max-age=60, must-revalidate" --content-type "application/json"
+
+# A raiz do domínio. Existe para que a instrução de instalação seja só
+# "skill.velkcms.com" — o agente abre a raiz e a própria página diz o que
+# fazer, inclusive num comentário HTML escrito para ele.
+#
+# O R2 não resolve / para index.html sozinho: é preciso uma regra de rewrite
+# na Cloudflare mandando / para /index.html. Sem ela a raiz devolve 404 e a
+# instrução curta não funciona — o arquivo aqui responde só em /index.html.
+s3cp tools/site/index.html "s3://$R2_BUCKET/index.html" --cache-control "public, max-age=300" --content-type "text/html; charset=utf-8"
+
+echo ""
+echo "publicado $VERSION"
+echo "  $RELEASE_BASE_URL/velk-skill-$VERSION.tar.gz"
+echo "  $RELEASE_BASE_URL/velk-skill-latest.tar.gz"
+echo "  $RELEASE_BASE_URL/versions.json"

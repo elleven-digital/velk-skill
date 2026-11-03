@@ -1,0 +1,83 @@
+#!/bin/bash
+# Fake ssh for the test suite. Parses options the way OpenSSH does —
+# they may also follow the destination — then runs the "remote" command
+# locally. rsync's -e transport works through it too: rsync runs
+# `ssh host rsync --server ...`, and that local rsync speaks the real protocol.
+# Like OpenSSH, it takes this side's stdin whether or not the remote command
+# reads it (unless -n): a script that must keep its stdin for a later call
+# has to hand the earlier ones /dev/null.
+#
+#   FAKE_SSH_ALLOW_ALL    set → every key is accepted
+#   FAKE_SSH_AUTHORIZED   accepted public-key bodies, one per line
+#   FAKE_SSH_UNREACHABLE  set → "Connection refused"
+#   FAKE_SSH_ERROR        set → printed as ssh's error, exit 255 (a changed
+#                         host key, a reset connection…)
+#   FAKE_SSH_G_OUTPUT     what `ssh -G <alias>` prints
+#   FAKE_REMOTE_PATH      prepended to PATH for the remote command (PHP)
+#   FAKE_CALLS            one line per call
+#   (-o ProxyCommand=… runs on this machine, like the real ssh: an option
+#   smuggled in through a user or host name shows up as a command that ran)
+#   FAKE_SSH_HOOK         a command run here, once, just before the first
+#                         remote command containing FAKE_SSH_HOOK_ON — what
+#                         someone else does while a script is halfway through
+#                         (it sees that remote command in FAKE_SSH_CMD)
+
+echo "ssh $*" >> "${FAKE_CALLS:-/dev/null}"
+
+key=""; want_G=0; dest=""; no_stdin=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -G) want_G=1; shift ;;
+        -n) no_stdin=1; shift ;;
+        -oProxyCommand=*) /bin/bash -c "${1#-oProxyCommand=}" </dev/null; shift ;;
+        -o) case "$2" in ProxyCommand=*) /bin/bash -c "${2#ProxyCommand=}" </dev/null ;; esac; shift 2 ;;
+        -i) key="$2"; shift 2 ;;
+        -p|-l|-F|-E|-c|-m|-J|-L|-R|-D|-w|-b|-e|-S|-W|-O|-Q|-B|-I) shift 2 ;;
+        -*) shift ;;
+        *)
+            if [ -z "$dest" ]; then dest="$1"; shift; continue; fi
+            break ;;
+    esac
+done
+
+if [ "$want_G" = 1 ]; then cat "$FAKE_SSH_G_OUTPUT"; exit 0; fi
+
+if [ -n "${FAKE_SSH_ERROR:-}" ]; then
+    echo "$FAKE_SSH_ERROR" >&2
+    exit 255
+fi
+
+if [ -n "${FAKE_SSH_UNREACHABLE:-}" ]; then
+    echo "ssh: connect to host ${dest#*@} port 65002: Connection refused" >&2
+    exit 255
+fi
+
+if [ -z "${FAKE_SSH_ALLOW_ALL:-}" ]; then
+    body=""
+    if [ -n "$key" ] && [ -f "${key}.pub" ]; then
+        body=$(awk '{print $2}' "${key}.pub")
+    else
+        for k in "${HOME}/.ssh/id_ed25519" "${HOME}/.ssh/id_rsa"; do
+            if [ -f "${k}.pub" ]; then body=$(awk '{print $2}' "${k}.pub"); break; fi
+        done
+    fi
+    if [ -z "$body" ] || ! grep -qxF "$body" "$FAKE_SSH_AUTHORIZED" 2>/dev/null; then
+        echo "${dest}: Permission denied (publickey)." >&2
+        exit 255
+    fi
+fi
+
+[ $# -eq 0 ] && exit 0
+if [ -n "${FAKE_SSH_HOOK:-}" ] && [ ! -e "${SANDBOX}/.ssh-hook-fired" ]; then
+    case "$*" in
+        *"${FAKE_SSH_HOOK_ON:?}"*) : > "${SANDBOX}/.ssh-hook-fired"; FAKE_SSH_CMD="$*" /bin/bash -c "$FAKE_SSH_HOOK" ;;
+    esac
+fi
+PATH="${FAKE_REMOTE_PATH}:${PATH}"
+case "$*" in "rsync --server"*) exec /bin/bash -c "$*" ;; esac   # a live conversation
+[ "$no_stdin" = 1 ] && exec /bin/bash -c "$*" < /dev/null
+fed=$(mktemp "${SANDBOX}/ssh-stdin.XXXXXX")
+cat > "$fed"
+/bin/bash -c "$*" < "$fed"; status=$?
+rm -f "$fed"
+exit "$status"

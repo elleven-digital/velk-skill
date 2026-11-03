@@ -1,0 +1,4 @@
+#!/bin/bash
+# Fake sw_vers: FAKE_SW_VERS answers -productVersion.
+if [ "${1:-}" = "-productVersion" ] && [ -n "${FAKE_SW_VERS:-}" ]; then echo "$FAKE_SW_VERS"; exit 0; fi
+exec /usr/bin/sw_vers "$@"

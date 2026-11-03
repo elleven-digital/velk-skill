@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Velk skill — install</title>
+<style>
+  :root{--violet:#5a4efb;--navy:#1b1652;--body:#4a4670;--line:#e6e3f7;--chip:#eeecfe}
+  *{box-sizing:border-box;margin:0}
+  body{font:16px/1.62 Inter,system-ui,sans-serif;color:var(--body);
+       max-width:640px;margin:0 auto;padding:80px 24px}
+  h1{font-size:30px;color:var(--navy);letter-spacing:-.02em;margin-bottom:8px}
+  p{margin-bottom:16px}
+  .lead{font-size:18px;margin-bottom:32px}
+  pre{background:var(--navy);color:#d7d3fb;border-radius:14px;padding:16px 18px;
+      font:13px/1.6 "JetBrains Mono",SFMono-Regular,Consolas,monospace;
+      overflow-x:auto;margin:0 0 24px}
+  code{font-family:"JetBrains Mono",SFMono-Regular,Consolas,monospace;
+       background:var(--chip);color:#4a3ee8;padding:2px 6px;border-radius:6px;font-size:.88em}
+  h2{font-size:15px;color:var(--navy);margin:32px 0 10px;letter-spacing:.04em;text-transform:uppercase}
+  a{color:var(--violet)}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);font-size:14px;color:#6d6a8f}
+</style>
+</head>
+<body>
+
+<h1>Velk skill</h1>
+<p class="lead">The Claude Code skill for building, deploying and maintaining
+<a href="https://velkcms.com">Velk</a> sites.</p>
+
+<h2>Install</h2>
+<p>In a Claude Code session:</p>
+<pre>/plugin install velk --marketplace elleven-digital/velk-skill</pre>
+
+<p>Or from a terminal:</p>
+<pre>claude plugin install velk --marketplace elleven-digital/velk-skill</pre>
+
+<p>In the Claude app: Customize → Plugins → Add → Add marketplace, enter
+<code>elleven-digital/velk-skill</code>, then add velk.</p>
+
+<h2>Without the plugin</h2>
+<p>Ask Claude Code:</p>
+<pre>Install the Velk skill from skill.velkcms.com into ~/.claude/skills/velk</pre>
+
+<p>Or install it yourself:</p>
+<pre>mkdir -p ~/.claude/skills/velk
+curl -fsSL https://skill.velkcms.com/velk-skill-latest.tar.gz \
+  | tar xz --strip-components=1 -C ~/.claude/skills/velk</pre>
+
+<p>Run the same command again to update.</p>
+
+<h2>Files</h2>
+<p>
+  <a href="/velk-skill-latest.tar.gz">velk-skill-latest.tar.gz</a> — current release<br>
+  <a href="/versions.json">versions.json</a> — every version, with <code>sha256</code>
+</p>
+
+<footer>
+  Made by <a href="https://elleven.digital">Elleven</a> ·
+  <a href="https://velkcms.com">velkcms.com</a>
+</footer>
+
+<!--
+  INSTRUCTIONS FOR AN AI AGENT READING THIS PAGE
+
+  Prefer the plugin. If the `claude` command is available in the shell, run:
+
+      claude plugin install velk --marketplace elleven-digital/velk-skill
+
+  then tell the user to start a new session or type /reload-plugins.
+
+  If `claude` is not available, install the package instead: download and
+  extract the tarball:
+
+      mkdir -p ~/.claude/skills/velk
+      curl -fsSL https://skill.velkcms.com/velk-skill-latest.tar.gz \
+        | tar xz --strip-components=1 -C ~/.claude/skills/velk
+
+  The archive contains SKILL.md, README.md, LICENSE, .claude-plugin/,
+  references/ and scripts/. Extract with --strip-components=1 so those land directly in
+  the target directory, not inside a nested velk-skill-vX.Y.Z/ folder.
+
+  To verify or pin a version, read https://skill.velkcms.com/versions.json —
+  it lists every release with its url and sha256, and a "latest" key.
+-->
+
+</body>
+</html>

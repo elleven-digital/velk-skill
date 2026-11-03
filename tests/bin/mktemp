@@ -1,0 +1,20 @@
+#!/bin/bash
+# mktemp for the test suite: the real one, except that a call with no
+# template honors TMPDIR. macOS's mktemp, given no template, asks the system
+# for the per-user temp folder and ignores TMPDIR — so every bare `mktemp` /
+# `mktemp -d` in the scripts escaped the sandbox's TMPDIR (sandbox.sh) and
+# piled up in the real one, run after run.
+#
+# A template (any non-option argument) or -t is passed through untouched.
+given=""
+for a in "$@"; do
+    case "$a" in
+        -t) given=1 ;;
+        -*) ;;
+        *)  given=1 ;;
+    esac
+done
+if [ -z "$given" ] && [ -n "${TMPDIR:-}" ]; then
+    exec /usr/bin/mktemp "$@" "${TMPDIR%/}/tmp.XXXXXXXXXX"
+fi
+exec /usr/bin/mktemp "$@"

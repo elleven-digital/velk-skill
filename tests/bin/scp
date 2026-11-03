@@ -1,0 +1,21 @@
+#!/bin/bash
+# Fake scp for the test suite: the "server" is a local folder, so
+# `scp [options] <file> <host>:<path>` copies <file> to <path>.
+#
+#   FAKE_SSH_UNREACHABLE  set → "Connection refused"
+#   FAKE_CALLS            one line per call
+
+echo "scp $*" >> "${FAKE_CALLS:-/dev/null}"
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -P|-i|-o|-F|-l|-S|-c|-J) shift 2 ;;
+        -*) shift ;;
+        *) break ;;
+    esac
+done
+[ $# -eq 2 ] || { echo "fake scp: expected <file> <host>:<path>" >&2; exit 1; }
+if [ -n "${FAKE_SSH_UNREACHABLE:-}" ]; then
+    echo "ssh: connect to host ${2%%:*} port 65002: Connection refused" >&2
+    exit 255
+fi
+cp "$1" "${2#*:}"

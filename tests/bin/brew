@@ -1,0 +1,27 @@
+#!/bin/bash
+# Fake Homebrew. Formulas "install" into $FAKE_BREW_PREFIX/<formula>; one
+# named in FAKE_BREW_MISSING doesn't exist. A php@X.Y it installs answers X.Y
+# to anything; plain "php" answers FAKE_BREW_LATEST_PHP. One named in
+# FAKE_BREW_BROKEN reports success and installs nothing.
+echo "brew $*" >> "${FAKE_CALLS:-/dev/null}"
+case "${1:-}" in
+    --prefix)
+        echo "${FAKE_BREW_PREFIX}/${2:-}" ;;
+    install)
+        f="$2"
+        case " ${FAKE_BREW_MISSING:-} " in
+            *" $f "*) echo "Error: No available formula with the name \"$f\"." >&2; exit 1 ;;
+        esac
+        case " ${FAKE_BREW_BROKEN:-} " in
+            *" $f "*) exit 0 ;;   # reports success, installs nothing
+        esac
+        mkdir -p "${FAKE_BREW_PREFIX}/$f/bin"
+        case "$f" in
+            php@*) printf '#!/bin/bash\necho %s\n' "${f#php@}" > "${FAKE_BREW_PREFIX}/$f/bin/php" ;;
+            php)   printf '#!/bin/bash\necho %s\n' "${FAKE_BREW_LATEST_PHP:-8.5}" > "${FAKE_BREW_PREFIX}/$f/bin/php" ;;
+            mysql) printf '#!/bin/bash\nexit 0\n' > "${FAKE_BREW_PREFIX}/$f/bin/mysql" ;;
+        esac
+        chmod +x "${FAKE_BREW_PREFIX}/$f/bin/"* ;;
+    services)
+        exit 0 ;;
+esac

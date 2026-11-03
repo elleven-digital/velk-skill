@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "velk",
+  "description": "The official Velk marketplace: the Velk plugin for Claude Code.",
+  "owner": {
+    "name": "Elleven Digital"
+  },
+  "plugins": [
+    {
+      "name": "velk",
+      "source": "./plugin",
+      "description": "Build, deploy and maintain Velk CMS sites: the site.json schema, themes and templates, installs and engine upgrades, and deploys, content edits and backups over SSH (rsync, mysqldump) to the servers you configure.",
+      "category": "development",
+      "homepage": "https://velkcms.com"
+    }
+  ]
+}

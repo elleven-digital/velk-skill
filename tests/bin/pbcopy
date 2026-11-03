@@ -1,0 +1,6 @@
+#!/bin/bash
+# Fake pbcopy: the "clipboard" is a file, so tests can read what was copied.
+# No script copies anything any more. It stays so that one that starts to
+# again writes here, where test_key_shows_the_public_key_and_leaves_the_clipboard_alone
+# sees it, and not to the real clipboard of whoever runs the suite.
+cat > "${FAKE_CLIPBOARD:-/dev/null}"

@@ -1,0 +1,5 @@
+.DS_Store
+
+# Publicação — credenciais reais e artefatos gerados.
+.release.env
+dist/

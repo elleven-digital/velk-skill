@@ -1,0 +1,4 @@
+#!/bin/bash
+# Fake uname: FAKE_UNAME answers `uname -s`; anything else is the real one.
+if [ -n "${FAKE_UNAME:-}" ] && [ "${1:-}" = "-s" ]; then echo "$FAKE_UNAME"; exit 0; fi
+exec /usr/bin/uname "$@"

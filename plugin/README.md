@@ -85,6 +85,11 @@ through the scripts in `scripts/`, which you can read before running them:
 The skill sends no data to Elleven Digital or anyone else, and collects no
 usage data.
 
+## Privacy
+
+What the plugin handles, where it stays and where it connects:
+[privacy policy](PRIVACY.md).
+
 ## How it works
 
 `SKILL.md` is a lean orientation + router — Claude reads it to understand Velk

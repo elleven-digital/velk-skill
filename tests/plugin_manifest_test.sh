@@ -50,6 +50,14 @@ test_the_manifests_carry_no_email_address() {
     assert_eq "" "$out" "the manifests are public"
 }
 
+test_the_privacy_policy_url_points_at_the_file_in_the_plugin() {
+    # The directory links this URL from the listing; it must name a file that ships.
+    url=$(jq -r '.privacyPolicyUrl // empty' "$PLUGIN")
+    prefix="https://github.com/elleven-digital/velk-skill/blob/main/plugin/"
+    case "$url" in "$prefix"*) ;; *) fail "privacyPolicyUrl must point into plugin/ on main: '$url'" ;; esac
+    assert_file "${SKILL_DIR}/${url#"$prefix"}"
+}
+
 test_the_plugin_folder_has_a_readme_and_a_license() {
     assert_file "${SKILL_DIR}/README.md"
     assert_file "${SKILL_DIR}/LICENSE"

@@ -8,6 +8,7 @@
   },
   "homepage": "https://velkcms.com",
   "repository": "https://github.com/elleven-digital/velk-skill",
+  "privacyPolicyUrl": "https://github.com/elleven-digital/velk-skill/blob/main/plugin/PRIVACY.md",
   "license": "MIT",
   "keywords": ["velk", "cms", "php", "mysql", "themes", "deploy", "ssh"]
 }

@@ -1,6 +1,6 @@
 {
   "name": "velk",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Build, deploy and maintain Velk CMS sites: the site.json schema, themes and templates, installs and engine upgrades, and deploys, content edits and backups over SSH (rsync, mysqldump) to the servers you configure.",
   "author": {
     "name": "Elleven Digital",

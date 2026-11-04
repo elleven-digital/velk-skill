@@ -1,0 +1,175 @@
+#!/bin/bash
+# tools/codex-package — o plugin do Velk no formato do Codex (ChatGPT e Codex).
+#
+# A skill é a mesma do plugin do Claude (a pasta plugin/); muda a embalagem:
+#
+#   .codex-plugin/plugin.json   o manifesto: codex/plugin.json + a versão
+#   skills/velk/                SKILL.md, references/, scripts/ e a ficha
+#                               agents/openai.yaml (codex/agents/)
+#   assets/                     o ícone e o logo da vitrine
+#   README.md, LICENSE, PRIVACY.md
+#
+# Gera em dist/codex/ um marketplace local (para testar no Codex antes de
+# enviar) e, em dist/, o ZIP que vai para o portal de plugins da OpenAI
+# (platform.openai.com/plugins). Nada é enviado daqui.
+#
+#   tools/codex-package [version] [--worktree] [--out=<dir>]
+#     version     ex.: v1.6.0 (padrão: conteúdo de VERSION)
+#     --worktree  monta da cópia de trabalho, não da tag — para testar antes
+#                 do release
+#     --out=<dir> onde gerar (padrão: dist)
+#
+# Responde em linhas KEY=value: PACKAGE_DIR, MARKETPLACE_DIR, ZIP, SHA256.
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+VERSION=""
+FROM_TREE=0
+OUT="dist"
+for arg in "$@"; do
+  case "$arg" in
+    --worktree) FROM_TREE=1 ;;
+    --out=*) OUT="${arg#--out=}" ;;
+    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "opção desconhecida: $arg" >&2; exit 2 ;;
+    *) VERSION="$arg" ;;
+  esac
+done
+[ -z "$VERSION" ] && VERSION="$(tr -d '[:space:]' < VERSION)"
+case "$VERSION" in
+  v[0-9]*.[0-9]*.[0-9]*) ;;
+  *) echo "versão inválida: \"$VERSION\" (esperado vX.Y.Z)" >&2; exit 2 ;;
+esac
+
+for tool in jq zip shasum; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "falta a ferramenta: $tool" >&2; exit 1; }
+done
+
+die() { echo "$*" >&2; exit 1; }
+
+# ── a fonte: a tag, ou a cópia de trabalho ──────────────────────────────────
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/plugin" "$WORK/codex"
+if [ "$FROM_TREE" = 1 ]; then
+  cp -R plugin/. "$WORK/plugin/"
+  cp -R codex/. "$WORK/codex/"
+else
+  git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null \
+    || die "tag $VERSION não existe — crie a tag antes, ou use --worktree para testar"
+  git archive --format=tar "$VERSION:plugin" | tar -x -C "$WORK/plugin"
+  git archive --format=tar "$VERSION:codex" 2>/dev/null | tar -x -C "$WORK/codex" \
+    || die "a tag $VERSION não tem a pasta codex/"
+fi
+
+# A versão sai do mesmo lugar que a do Claude: as duas lojas recebem o mesmo
+# número, e o release não ganha um terceiro arquivo para lembrar de subir.
+CLAUDE_VERSION="$(jq -r '.version // empty' "$WORK/plugin/.claude-plugin/plugin.json")"
+[ "v${CLAUDE_VERSION}" = "$VERSION" ] \
+  || die "plugin/.claude-plugin/plugin.json diz \"${CLAUDE_VERSION:-sem versão}\", não $VERSION — atualize o VERSION e o plugin.json juntos"
+
+TEMPLATE="$WORK/codex/plugin.json"
+[ -f "$TEMPLATE" ] || die "falta codex/plugin.json"
+jq -e . "$TEMPLATE" >/dev/null || die "codex/plugin.json não é JSON válido"
+[ "$(jq 'has("version")' "$TEMPLATE")" = "false" ] \
+  || die "codex/plugin.json não leva \"version\": ela vem do VERSION"
+
+# ── as regras do portal, antes de gerar ─────────────────────────────────────
+# O portal recusa o envio com estes problemas; melhor saber aqui.
+len() { jq -r "$1 | if . == null then 0 else length end" "$TEMPLATE"; }
+name="$(jq -r .name "$TEMPLATE")"
+[[ "$name" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] && [ "${#name}" -le 64 ] \
+  || die "name \"$name\": até 64 caracteres, minúsculas, números e hífens simples"
+[ "$(len .interface.displayName)" -le 30 ] || die "interface.displayName passa de 30 caracteres"
+[ "$(len .interface.shortDescription)" -le 30 ] || die "interface.shortDescription passa de 30 caracteres"
+[ "$(len .interface.longDescription)" -le 4000 ] || die "interface.longDescription passa de 4000 caracteres"
+[ "$(len .description)" -le 4000 ] || die "description passa de 4000 caracteres"
+[ "$(len '.interface.defaultPrompt')" -le 3 ] || die "interface.defaultPrompt: no máximo 3 pedidos"
+[ "$(jq '[.interface.defaultPrompt[]? | select(length > 128)] | length' "$TEMPLATE")" = "0" ] \
+  || die "interface.defaultPrompt: cada pedido com até 128 caracteres"
+for key in hooks apps mcpServers; do
+  [ "$(jq --arg k "$key" 'has($k)' "$TEMPLATE")" = "false" ] \
+    || die "codex/plugin.json não pode ter \"$key\": plugins com isso não entram no diretório público"
+done
+[ "$(jq -r '.requires_local_executor' "$TEMPLATE")" = "true" ] \
+  || die "requires_local_executor precisa ser true: os scripts rodam no computador da pessoa"
+
+# ── montar ──────────────────────────────────────────────────────────────────
+mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd -P)"
+MARKET="$OUT/codex/marketplace"
+PKG="$MARKET/plugins/$name"
+SKILL="$PKG/skills/$name"
+rm -rf "$OUT/codex"
+mkdir -p "$PKG/.codex-plugin" "$PKG/assets" "$SKILL/assets"
+
+cp "$WORK/plugin/SKILL.md" "$SKILL/"
+cp -R "$WORK/plugin/references" "$WORK/plugin/scripts" "$SKILL/"
+cp -R "$WORK/codex/agents" "$SKILL/"
+cp "$WORK/plugin/LICENSE" "$WORK/plugin/PRIVACY.md" "$PKG/"
+cp "$WORK/codex/README.md" "$PKG/README.md"
+
+ICON="$WORK/plugin/.claude-plugin/icon.png"
+[ -f "$ICON" ] || die "falta plugin/.claude-plugin/icon.png"
+cp "$ICON" "$PKG/assets/icon.png"
+cp "$ICON" "$PKG/assets/logo.png"
+cp "$ICON" "$SKILL/assets/icon.png"
+
+jq --arg v "${VERSION#v}" '. as $m | {name: $m.name, version: $v} + ($m | del(.name))' \
+  "$TEMPLATE" > "$PKG/.codex-plugin/plugin.json"
+
+# Os arquivos que o manifesto cita precisam estar no pacote.
+for ref in composerIcon logo; do
+  path="$(jq -r ".interface.$ref" "$PKG/.codex-plugin/plugin.json")"
+  case "$path" in ./*) ;; *) die "interface.$ref deve começar com ./" ;; esac
+  [ -f "$PKG/${path#./}" ] || die "interface.$ref aponta para $path, que não está no pacote"
+done
+
+# ── o que só no Codex soa errado ────────────────────────────────────────────
+# Duas frases da skill falam do Claude. A mensagem que a agência repassa ao
+# cliente diria para ele abrir o assistente errado, e o ${CLAUDE_SKILL_DIR}
+# só existe no Claude Code. A troca é exata: se a frase mudar na skill, o
+# pacote não sai, em vez de sair com a frase antiga.
+adapt() { # <arquivo> <de> <para>
+  FROM="$2" TO="$3" perl -e '
+    local $/; my $s = <STDIN>; my $n = () = $s =~ /\Q$ENV{FROM}\E/g;
+    exit 3 if $n != 1;
+    $s =~ s/\Q$ENV{FROM}\E/$ENV{TO}/;
+    print $s;
+  ' < "$1" > "$1.tmp" || { rm -f "$1.tmp"; die "não achei (uma vez só) em ${1#"$SKILL/"}: $2"; }
+  mv "$1.tmp" "$1"
+}
+adapt "$SKILL/references/access.md" \
+  'Abra o Claude, na aba **Code**, numa pasta nova' \
+  'Abra o Codex, numa pasta nova'
+adapt "$SKILL/SKILL.md" \
+  'run tested shell in `${CLAUDE_SKILL_DIR}/scripts/` (the `scripts/` folder next to' \
+  'run tested shell in the `scripts/` folder next to'
+
+find "$PKG" -name .DS_Store -delete
+
+# Marketplace local, no formato do Codex, só para o teste antes do envio.
+mkdir -p "$MARKET/.agents/plugins"
+jq -n --arg name "$name" --arg display "$(jq -r .interface.displayName "$TEMPLATE")" \
+  --arg category "$(jq -r .interface.category "$TEMPLATE")" '{
+    name: $name,
+    interface: {displayName: $display},
+    plugins: [{
+      name: $name,
+      source: {source: "local", path: ("./plugins/" + $name)},
+      policy: {installation: "AVAILABLE", authentication: "ON_INSTALL"},
+      category: $category
+    }]
+  }' > "$MARKET/.agents/plugins/marketplace.json"
+
+# ── o ZIP do portal: a raiz do plugin, sem pasta em volta ───────────────────
+ZIP="$OUT/velk-codex-$VERSION.zip"
+rm -f "$ZIP"
+(cd "$PKG" && zip -qrX "$ZIP" . -x '*.DS_Store')
+SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+
+echo "PACKAGE_DIR=$PKG"
+echo "MARKETPLACE_DIR=$MARKET"
+echo "ZIP=$ZIP"
+echo "SHA256=$SHA"

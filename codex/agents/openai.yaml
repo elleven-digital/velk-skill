@@ -1,0 +1,7 @@
+interface:
+  display_name: "Velk"
+  short_description: "Build, deploy and maintain Velk CMS sites"
+  icon_small: "./assets/icon.png"
+  icon_large: "./assets/icon.png"
+  brand_color: "#5B4CFF"
+  default_prompt: "Use $velk to build, deploy or back up a Velk site."

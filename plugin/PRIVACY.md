@@ -1,12 +1,13 @@
-# Privacy policy — Velk plugin for Claude
+# Privacy policy — Velk plugin
 
 Effective 4 November 2026. Published by Elleven Digital (https://elleven.digital).
 
 ## Summary
 
 The Velk plugin collects nothing. It has no analytics or telemetry and sends no
-data to Elleven Digital. It runs on your computer, only when you ask Claude for
-a Velk task, and connects only to the servers you configure.
+data to Elleven Digital. It runs on your computer, only when you ask your AI
+assistant (Claude, ChatGPT or Codex) for a Velk task, and connects only to the
+servers you configure.
 
 ## What it handles, and where that stays
 
@@ -40,11 +41,15 @@ a Velk task, and connects only to the servers you configure.
 - **Homebrew**, only if you ask for a full local copy and agree to install PHP
   and MySQL with `brew install`.
 
-## Claude
+## Your AI assistant
 
-The plugin runs inside Claude. What you share in a conversation, and what Claude
-reads while it works, is handled under Anthropic's privacy policy:
-https://www.anthropic.com/legal/privacy.
+The plugin runs inside the assistant you install it in. What you share in a
+conversation, and what the assistant reads while it works, is handled under
+that provider's privacy policy:
+
+- **Claude**: Anthropic's privacy policy, https://www.anthropic.com/legal/privacy.
+- **ChatGPT and Codex**: OpenAI's privacy policy,
+  https://openai.com/policies/privacy-policy/.
 
 ## Children
 

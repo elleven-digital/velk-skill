@@ -84,3 +84,43 @@ ar até a nova ser aprovada.
 curl -s https://skill.velkcms.com/versions.json | jq .latest
 curl -sI https://skill.velkcms.com/velk-skill-latest.tar.gz | head -1
 ```
+
+## Diretório da OpenAI (ChatGPT e Codex)
+
+O mesmo plugin, embalado no formato do Codex por `tools/codex-package`:
+`.codex-plugin/plugin.json` (o `codex/plugin.json` + a versão do `VERSION`), a
+skill em `skills/velk/` e os ícones em `assets/`. O marketplace do Claude
+sozinho não basta: o Codex até instala o plugin, mas só carrega skills de
+`skills/<nome>/SKILL.md`, e a nossa fica na raiz de `plugin/`.
+
+O pacote leva `"requires_local_executor": true` — os scripts rodam no
+computador da pessoa, então o diretório mostra **Desktop only** e só instala
+pelo app de desktop. Se o portal recusar esse campo, a OpenAI pede o ID da
+organização para liberar o envio.
+
+### Uma vez
+
+No platform.openai.com, a verificação de identidade (pessoa ou empresa) nas
+configurações da organização. Quem envia é o dono da organização, ou alguém
+com a permissão **Apps Management Write**.
+
+### A cada versão, depois da tag
+
+```bash
+tools/codex-package v1.6.0      # dist/velk-codex-v1.6.0.zip e dist/codex/marketplace/
+```
+
+Testar antes no Codex do app do ChatGPT (o CLI vem dentro do app):
+
+```bash
+C=/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex
+$C plugin marketplace add "$PWD/dist/codex/marketplace"
+$C plugin add velk@velk
+(cd "$(mktemp -d)" && $C debug prompt-input | grep -c 'velk:velk')   # 1 ou mais: a skill entrou
+$C plugin remove velk@velk && $C plugin marketplace remove velk
+```
+
+Enviar: platform.openai.com/plugins → **Upload new or existing plugin** → o
+ZIP → checagens automáticas → **Submit for review** → depois de aprovado,
+**Publish plugin**. Cada versão é um ZIP novo, com revisão nova: aqui não há
+publicação automática pelo `main`.

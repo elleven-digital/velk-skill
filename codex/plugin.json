@@ -1,0 +1,33 @@
+{
+  "name": "velk",
+  "description": "Build, deploy and maintain Velk CMS sites: the site.json schema, themes and templates, installs and engine upgrades, and deploys, content edits and backups over SSH (rsync, mysqldump) to the servers you configure.",
+  "author": {
+    "name": "Elleven Digital",
+    "url": "https://elleven.digital"
+  },
+  "homepage": "https://velkcms.com",
+  "repository": "https://github.com/elleven-digital/velk-skill",
+  "license": "MIT",
+  "keywords": ["velk", "cms", "php", "mysql", "themes", "deploy", "ssh"],
+  "skills": "./skills/",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "Velk",
+    "shortDescription": "Build and deploy Velk sites",
+    "longDescription": "Work with Velk, a minimalist schema-driven PHP/MySQL CMS with plain-PHP themes and the site structure in theme/site.json. The skill knows the schema, field types, templates, helpers, i18n, media, forms, options and members, so it can build and change a site without guessing. It also ships tested scripts for the server side: install a site, upgrade the engine, deploy over SSH, publish a theme, edit live content, copy production to your computer and back up files and databases. The scripts run on your computer, only when you ask, and connect only to the servers you configure in the project's .deploy/ssh.json, with your own SSH key.",
+    "developerName": "Elleven Digital",
+    "category": "Engineering",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://velkcms.com",
+    "supportURL": "https://github.com/elleven-digital/velk-skill/issues",
+    "privacyPolicyURL": "https://github.com/elleven-digital/velk-skill/blob/main/plugin/PRIVACY.md",
+    "defaultPrompt": [
+      "Turn this static HTML into a Velk theme",
+      "Add a gallery field to the post type in site.json",
+      "Deploy this Velk site to my server over SSH"
+    ],
+    "brandColor": "#5B4CFF",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
+  }
+}

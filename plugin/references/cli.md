@@ -21,6 +21,10 @@ tool or skill.
 | `user:create <email> <pw> <name>` | Create an admin user. |
 | `serve [port]` | Start the built-in PHP dev server (default `:8080` → `http://localhost:8080`). |
 | `cleanup:login-attempts` | Drop old `login_attempts` (`--days=30`). |
+| `cleanup:registrations` | (v3.11.0+) Delete registrations cancelled, and pending ones untouched, for more than `--days=30` (and holding no seat), with their uploaded files. Confirmed ones stay. Schedule it on sites that use registrations (LGPD). |
+| `cleanup:spam-submissions` | Drop blocked (`keep_spam`) form submissions older than `--days=30`; since v3.11.0 also blocked registrations (second output line, once the 3.11 migration has run). Schedule it where `keep_spam` is on. |
+| `cleanup:incomplete-submissions` | Drop unfinished multi-step submissions older than `--days=30`. |
+| `cleanup:rate-limit-hits` | Drop old `rate_limit_hits` (`--days=30`). |
 | `i18n:scan` | Scan theme + core for `t()` calls and register source strings. |
 | `csp:check` | (v3.8.1+) What strict mode would block in the theme — `<script>` without a nonce, `on…=`, `javascript:`, a policy of the theme's own — plus problems in the CSP settings, and (v3.8.3+) a form or button posting to another site that nothing allows. Since v3.8.4 the settings are `security.csp` in `site.json`; it also lists an old `CSP_*` variable left in `.env`, which is no longer read. Its first line shows the mode in force. Run it on the server (`scripts/content/velk.sh --project . -- csp:check`) to read the real `.env` and `APP_URL`. Exit 1 on an error; no database needed. |
 | `media:variants` | Backfill the `thumb` + every declared image variant for all images (`--regen` rebuilds existing files). Run after upgrading an existing site or changing a variant's dimensions. |
@@ -51,7 +55,7 @@ tool or skill.
 
 | Command | What it does |
 |---|---|
-| `form:export <form-id>` | (v3.8.0+) Approved, completed submissions as CSV on stdout — the same file as the **Export** block on the form screen. By default only the form's fields; `--cols=name,email,@meta,@params` picks columns (`@meta` = id, date, IP, browser, referrer, e-mail status, recipients; `@params` = UTM and click IDs). `--from=`/`--to=YYYY-MM-DD`, `--sep=,` (default `;`), `--no-bom`. Errors go to stderr, so `form:export contato > leads.csv` is safe; any exit but 0 means the file is incomplete. |
+| `form:export <form-id>` | (v3.8.0+) Approved, completed submissions as CSV on stdout (on a registration form, v3.11.0+: its registrations) — the same file as the **Export** block on the form screen. By default only the form's fields; `--cols=name,email,@meta,@params` picks columns (`@meta` = id, date, IP, browser, referrer, e-mail status, recipients; `@params` = UTM and click IDs). `--from=`/`--to=YYYY-MM-DD`, `--sep=,` (default `;`), `--no-bom`. On a registration form: `@registration` is a column group (`registration_status`, `registration_confirmed_at`, `registration_cancelled_at`; in the default set), only confirmed registrations are exported unless `--pending` adds the pending ones — cancelled and spam never are. Errors go to stderr, so `form:export contato > leads.csv` is safe; any exit but 0 means the file is incomplete. |
 
 ## Common flags (content commands)
 

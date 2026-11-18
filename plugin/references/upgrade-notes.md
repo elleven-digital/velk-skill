@@ -27,6 +27,77 @@ unnecessary costs a temporary table; skipping a needed one costs the data.
 
 ---
 
+## v3.11.0 — runs two migrations; new global helpers can break a theme ⚠️ CHECK THE THEME BEFORE UPGRADING
+
+A site that uses none of the new features keeps its forms, submissions, CSV,
+webhooks and conversions exactly as before. What changes is below.
+
+### Before: helper names in the theme
+
+The core now declares `form_render()`, `form_page_field()`, `registration()`,
+`registration_state()`, `registration_url()` and `registration_status()`. A
+theme `functions.php` that declares one of those names without
+`function_exists()` stops with "Cannot redeclare" after the upgrade. In the
+local copy of the theme:
+
+```bash
+grep -rnE "function\s+(form_render|form_page_field|registration(_state|_url|_status)?)\s*\(" theme/
+```
+
+Nothing found: go on. Found: rename it — and its calls — in the theme, and
+publish the theme **before** the file swap.
+
+### The migrations
+
+Two migrations, creating three tables: `registrations`,
+`registration_settings` and `forms`. Applied on the first web request
+(`AUTO_MIGRATE`) or by `./bin/velk migrate`; additive, nothing existing is
+touched.
+
+### Reserved front URLs
+
+`GET /registration/<64 hex characters>` and `POST /registration` now belong
+to the engine; any other `/registration/...` address stays with the site.
+Member and store routes are matched first, so a members sign-up at
+`/registration` keeps working — but on a site with registration forms the
+registration buttons would then never reach the engine, and `schema:validate`
+refuses that combination. Move the member route if both are needed.
+
+### After: what changes for the client
+
+- **The admin item list** shows a checkbox on every row and an **Ações…** menu
+  once one is ticked (status, terms, delete), plus a **Filtros** button. The
+  trash-icon toggle next to the status filter is gone; the terms list keeps it.
+- **The forms sidebar group** is split into **Formulários** and, on sites with
+  registration forms or registration templates, **Inscrições**
+  (`/admin/forms?type=registrations`). The old "all forms" link with a total
+  is gone; counts stay on each form.
+- **`cleanup:spam-submissions`** also deletes blocked registrations, but only
+  once the migration has run.
+
+### `schema:validate` checks more
+
+A site that passed before can now fail:
+
+- `item` and `form` fields inside `page_templates` are checked (before, page
+  template fields weren't checked at all): an `item` field without
+  `item_type`, or pointing to a removed type, now fails.
+- Database clash: a `site.json` form whose id is already a panel form's is an
+  error; a panel form whose template was removed is a warning.
+- A `site.json` form can't use the ids `new` or `create`.
+- Warning: registration forms with an empty `APP_URL`.
+
+### Cron, if registrations are used
+
+```
+0 3 * * *  cd /var/www/<project> && php bin/velk cleanup:registrations --days=30
+```
+
+With confirmation on, the site holds data of people who never confirmed; this
+is the deadline (LGPD). `cleanup:spam-submissions` needs the migration first.
+
+---
+
 ## v3.9.0 — no migration; a theme function named `richtext` breaks the site ⚠️ CHECK THE THEME BEFORE UPGRADING
 
 ### Before: a `richtext()` in the theme
@@ -678,6 +749,10 @@ Worth knowing before a client asks "where did the button go":
   recipients "Add" button beside it.
 
 Neither changes behaviour.
+
+> **Changed in v3.11:** the item list no longer has the trash-icon toggle
+> (every row has a checkbox and an **Ações…** menu instead). Only the terms
+> list keeps it.
 
 ---
 

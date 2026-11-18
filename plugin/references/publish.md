@@ -83,6 +83,9 @@ It first refuses a local theme with source leftovers (`SOURCE_LEFTOVERS`).
    never merges the same changes twice.
 5. Local checks, in local mode only: `php -l` on every theme PHP file and
    `schema:validate`; warns when the local PHP differs from production's.
+   A `site.json` form whose id equals the id of a form created in the
+   production panel passes the local `schema:validate` (the local database
+   doesn't have it) but fails the live one — rename the `site.json` form.
    Opening the pages you changed in `bin/velk serve` and looking at them is
    yours to do before `commit` (SKILL.md, "Verifying a change actually
    works").

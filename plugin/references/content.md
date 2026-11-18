@@ -112,6 +112,9 @@ richtext with quotes/newlines).
   (not a `--dry-run`), `velk.sh` finishes or undoes an interrupted theme
   publish (`references/publish.md`); someone else's publish lock is left alone
   and the edit goes on — content lives in the database, not in `theme/`.
+- **`form` fields (v3.11.0+)** hold the **string id** of a form created in the
+  panel (e.g. `"workshop-de-marco"`), or `null` — not an integer. Read the
+  id from the panel/`page:get`; don't invent one.
 - **Repeater fields** want an array of objects shaped like the inner schema —
   check `item:schema` before guessing.
 - **Image fields** are a path/URL string, not a file. Uploads are out of

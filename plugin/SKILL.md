@@ -119,7 +119,7 @@ self-contained and explains the *why*, not just the steps.
 
 | You want to… | Read |
 |---|---|
-| Understand Velk / build or customize a site (schema, fields, templates, helpers, media, forms, options, members) | **`references/building.md`** |
+| Understand Velk / build or customize a site (schema, fields, templates, helpers, media, forms — incl. registrations and panel-created form templates —, item-list filters, options, members) | **`references/building.md`** |
 | Make a site multi-language (URL prefixes, per-content translation, fallbacks) | **`references/i18n.md`** |
 | Know the CLI (`bin/velk`) commands | **`references/cli.md`** |
 | Install a fresh Velk in an empty folder | **`references/install.md`** |

@@ -22,7 +22,8 @@ schema back out to render the site. This file covers all of it.
 - [URL conventions](#url-conventions)
 - [Media library](#media-library)
 - [Options pages](#options-pages)
-- [Forms](#forms)
+- [Forms](#forms) — incl. registrations and form templates
+- [The item list in the panel](#the-item-list-in-the-panel-filters-and-bulk-actions-v3110)
 - [Richtext blocks](#richtext-blocks-v390)
 - [Site members](#site-members)
 
@@ -36,6 +37,8 @@ Top-level keys:
 | `field_groups` | Reusable field bundles, referenced elsewhere as `{"group": "contato"}` and inlined at render time. |
 | `pages` | Structural pages keyed by page key (e.g. `home`): `label`, `template`, optional `url` (default `/` for `home`, `/{key}` otherwise), `fields`. |
 | `page_templates` | Templates for admin-created pages (the "+ Criar página" flow): `label`, `file`, `fields`. The row lives in the DB, not this JSON — URL is `/{slug}`, set in the admin. |
+| `forms` | Public forms keyed by id: `label`, `fields`, `subject`, `success_message`, optional `registration`, `webhook`… — see Forms. |
+| `form_templates` | (v3.11.0+) Templates the client makes forms from in the panel ("+ Criar formulário"): the keys of a form plus required `label` and `partial` — see Forms. |
 | `item_types` | Content types keyed by type (e.g. `post`): `label`, `label_singular`, `slug` (URL prefix), `template`, `taxonomies`, `templates` (alternate per-item layouts), `fields`, optional `has_page`, optional `manual_order` (v3.7.5+, see Manual ordering). No archive page: see Templates. |
 | `taxonomies` | Keyed (e.g. `categoria`): `label`, `label_singular`, `slug`, `hierarchical`, `template`, optional `manual_order` (v3.7.5+, see Manual ordering), optional `has_page` (default `true`; `false` 404s `/<slug>/<term>`, skips the sitemap, `Term::url()` → `''` — terms still exist and stay assignable in admin). |
 
@@ -76,11 +79,16 @@ duplicates the built-in block.
 | `flexible` | Repeater where each row picks a `layout` from a named set (`layouts: {key: {label, fields}}`). Saved rows carry `_layout` (reserved name) so the theme can switch on it — ACF Flexible Content equivalent. |
 | `link` | Composite `{title, url, new_tab}` (or `null` when blank). Blank URL never blocks a save; no scheme whitelist — allows `mailto:`, `#anchor`, relative paths. Render with `link_tag(field('cta'))`. |
 | `item` | Reference to another item, via searchable combobox — picker only offers **published** items of the target type. Define `item_type` (target slug). Stored as **integer id** like `image`. Resolve with `item(field('name'))` → `Item` or `null`. |
+| `form` | (v3.11.0+) A form **created in the panel** from a `form_templates` entry, picked via a searchable combobox. Optional `form_template` limits the choice to forms of that template. Stored as the form's **string id** (or `null`). Forms declared in `site.json → forms` are not offered. Render with `form_render(field('formulario'))`. |
 | `group` | Organizational only — collapsible box in the admin UI (`label` + `fields`, collapsed by default, `"open": true` to expand). Storage is flat, no wrapper key. |
 | `tabs` | Organizational only — tab strip (`tabs: [{label, fields}, ...]`). Same flat storage; two tabs can't reuse a field name (`schema:validate` catches it). |
 
 Common options on any field: `name` (required), `label`, `help`, `required`,
-`placeholder`. `field('name')` returns the raw stored shape — scalar for
+`placeholder`. **`filterable`** (v3.11.0+, default `false`): on a `select`,
+`boolean`, `date` (range), `number` (range) or `item` field of an **item type**,
+adds it to the item list's **Filtros** panel (see "The item list in the panel"). Not
+allowed inside `repeater`/`flexible`, nor on pages, options or taxonomies —
+`schema:validate` rejects it. `field('name')` returns the raw stored shape — scalar for
 simple types, array for `gallery`/`repeater`/`flexible`. `group`/`tabs` are
 invisible to storage — read children by their own name regardless of nesting.
 
@@ -228,6 +236,14 @@ in a subdirectory install; never hardcode a root path.
   `image_url()`.
 - `link_tag($link, $text = null, $attrs = [])` — safe `<a>` for a `link`
   field; adds `target="_blank" rel="noopener noreferrer"` when `new_tab`.
+
+**Forms on the site (v3.11.0+)**
+- `form_render($id)` — renders a `form`-field value (id of a panel form) with its template's `partial`; nothing for an empty id, a deleted form or a `site.json` form.
+- `form_page_field()` — hidden `_page` input with the current page path; goes inside a template's `<form>` so a registration's confirmation link returns to this page.
+- `registration($formId)` — the registration opened by the e-mail link in this session (`status`, `email`, `holds_seat`, `values`…), or `null`. Never the token.
+- `registration_state($formId)` — `open`, `code`, `limit`, `taken`, `remaining`, `opens_at`, `closes_at` (`limit`/`remaining` are `null` without a limit).
+- `registration_url()` — the `action` of the Confirm/Cancel buttons (`POST /registration`).
+- `registration_status()` — reads **and clears** the last answer of those buttons (`['status', 'code']`) or `null`.
 
 **Forms (admin only)** — `csrf_token()`, `csrf_field()`; always include
 `csrf_field()` in admin forms.
@@ -388,14 +404,20 @@ flash (`status`, `message`, `values`, `errors`). Lifecycle: POST
 `/forms/{id}` validates CSRF + honeypot + fields, saves to
 `form_submissions` (JSON `data`), emails the recipients set at
 `/admin/forms/{id}`, redirects to the referrer — a failed email still saves
-the submission. `/admin/forms` lists forms with submission counts.
+the submission. `/admin/forms` has two tabs (v3.11.0+): **Formulários** (message
+forms, with submission counts) and **Inscrições** (registration forms, count =
+confirmed registrations); the sidebar mirrors them.
 
 **Webhook**: `forms.<id>.webhook` (string or list) calls a
 `theme/functions.php` function AFTER save+email:
 `function(string $formId, array $values, array $context): void`. `$context`
 = `submission_id`, `ip`, `user_agent`, `referer`, `params` (captured keys only),
-`created_at`. Missing/throwing handler → `error_log`, never breaks the
-submission.
+`created_at`, and `step`, `total_steps`, `completed`, `data` (the accumulated
+lead; always present — on a form without `steps` they are `1`, `1`, `true` and
+the same array as `$values`, so don't use them to detect a stepped form). On a
+registration form `submission_id` is `null` (no submission is written) and the
+`registration` key is added — that is the case of `registration.webhook`.
+Missing/throwing handler → `error_log`, never breaks the submission.
 
 **AJAX submission** (v3.4+): send `Accept: application/json` and the response
 is a JSON body — `{status, message, errors?, values?, event?}`, `200` on
@@ -403,6 +425,140 @@ success, `422` on failure — instead of flash-and-redirect. Additive; a plain
 `<form>` POST is unchanged. Never `fetch()` WITHOUT that header: fetch follows
 the 302, the fetched render consumes the flash (`form_status()` is get +
 forget), and the message vanishes silently.
+
+### Registrations (v3.11.0+)
+
+A `registration` block in a form turns it into a form that gives out seats:
+one registration per e-mail (trimmed, lowercase), optional seat limit and
+registration period, e-mail confirmation on by default. It writes to
+`registrations`, **never** to `form_submissions`; fields, validation,
+honeypot, Turnstile, attribution and the panel are the form's own.
+
+```json
+"registration": { "email_field": "email", "page": "/workshop-dezembro",
+                  "confirm": true, "confirm_hours": 24,
+                  "emails": "inscricao", "webhook": "sync_inscricao" }
+```
+
+| Key | |
+|---|---|
+| `email_field` | Required. A field of the form that is `type: email` and `required`. |
+| `page` | Required (not in a template). Theme page path starting with `/`, where the e-mail link lands. |
+| `confirm` | Default `true`: born pending, counts once the person presses **Confirm**. `false`: born confirmed. |
+| `confirm_hours` | Default `24`: how long a pending registration holds its seat. |
+| `emails` | Default `registration`: folder under `theme/emails/` (lowercase letters, digits, `_`, `-`). |
+| `webhook` | Function(s) in `functions.php` called on every status change (created, confirmed, cancelled). |
+
+`registration` together with `steps` is an error. The seat limit and the
+period are the client's, set in the form's screen in the panel — not in
+`site.json` (until set: open, no limit). Run `schema:validate`: in production
+a broken `registration` silently degrades to a plain form.
+
+**The page** (`registration.page`): the link `GET /registration/{token}` only
+opens (the token goes to the session and the URL is redirected to `page`);
+the theme shows the state and two buttons that post to the engine. The link
+alone never confirms, so mail scanners can't register people.
+
+```php
+<?php $id = 'workshop-dezembro'; $state = registration_state($id); $reg = registration($id); ?>
+<?php if ($reg && $reg['status'] !== 'cancelled'): ?>
+  <form method="post" action="<?= e(registration_url()) ?>">
+    <?= csrf_field() ?>
+    <input type="hidden" name="form" value="<?= e($id) ?>">
+    <?php if ($reg['status'] === 'pending'): ?><button name="action" value="confirm">Confirmar</button><?php endif ?>
+    <button name="action" value="cancel">Cancelar inscrição</button>
+  </form>
+<?php elseif ($state['open']): ?>
+  <form method="post" action="<?= e(form_url($id)) ?>"> … csrf_field(), form_honeypot(), fields … </form>
+<?php endif ?>
+```
+
+Show the signup form only when `$state['open']`, but still map the
+`registration_*` codes in `form_status()` (the state can change before the
+submit). Read `registration_status()` once for the buttons' answer. A link
+that no longer opens (old, rotated) answers the theme's 404.
+
+**E-mails to the person** in `theme/emails/<folder>/`: `confirm.php` and
+`already.php` (required with `confirm: true`), `confirmed.php` and
+`cancelled.php` (optional, sent only if the file exists). The subject is the
+template's `<title>`; the e-mail renders in the language the person
+registered in. Variables: `$link`, `$registration`, `$values`, `$form`,
+`$site`.
+
+**Messages:** ten new codes the theme must word (`check_email`,
+`already_registered`, `registration_not_open`, `registration_closed`,
+`registration_full`, `registration_confirmed`, `registration_cancelled`,
+`already_confirmed`, `already_cancelled`, `registration_not_found`) — the
+list and meaning are in the engine's `docs/messages.md`. With `confirm: true`
+the submit answers `check_email` for everyone, so the form can't reveal who is
+registered.
+
+**Limits:** 100 submits per hour per IP and form (`rate_limited`); one
+e-mail per registration every 5 minutes. With confirmation on, the team
+e-mail, the form's `webhook` and the conversion fire on **confirmation**, and
+the conversion's `submission_id` is `null` (it gains `registration_id`).
+
+**LGPD:** schedule `./bin/velk cleanup:registrations --days=30` (cancelled and
+never-confirmed registrations; confirmed ones stay) — see `references/cli.md`.
+One form per event: turning `registration` on in a form with submissions
+doesn't convert them.
+
+### Form templates (v3.11.0+)
+
+`site.json → form_templates` lets the client create forms in the panel
+(**"+ Criar formulário"** on the forms tab), giving only the name; fields,
+messages and the registration mode come from the template.
+
+```json
+"form_templates": { "inscricao-evento": {
+  "label": "Inscrição em evento", "partial": "forms/inscricao-evento",
+  "subject": "Nova inscrição: {{nome}}",
+  "fields": [{"name": "nome", "type": "text", "label": "Nome", "required": true},
+             {"name": "email", "type": "email", "label": "E-mail", "required": true}],
+  "registration": { "email_field": "email", "confirm": true } } },
+"page_templates": { "evento": { "label": "Página de evento", "file": "page-evento.php",
+  "fields": [{"name": "formulario", "type": "form", "form_template": "inscricao-evento"}] } }
+```
+
+- A template takes every key a form takes, plus required `label` and
+  `partial` (a file in `theme/partials/` that renders **any** form of the
+  template). `registration.page` is **not allowed**: the confirmation link
+  returns to the page the person signed up from.
+- Put `<?= form_page_field() ?>` inside the partial's `<form>`; without it the
+  engine falls back to the Referer, which privacy tools may strip.
+- The partial receives `$form_id` and `$form`; use `form_url($form_id)`,
+  `form_status($form_id)`, `registration($form_id)`… with it. The page
+  template renders it:
+
+```php
+<?php // theme/templates/page-evento.php
+form_render(field('formulario'));
+```
+
+- The form's id comes from the name and never changes. Panel forms behave like
+  `site.json` forms everywhere (submissions, CSV, CLI, webhook). `site.json`
+  forms can't be renamed or deleted in the panel. `form_render` renders
+  nothing for an empty id, a deleted form or a `site.json` form.
+
+## The item list in the panel: filters and bulk actions (v3.11.0+)
+
+What the client sees on `/admin/items/{type}`:
+
+- **Checkboxes** on every row; ticking one shows the actions bar with an
+  **Ações…** menu: change status (publish/draft), assign terms of a taxonomy
+  (**Adicionar** keeps the existing ones, **Editar** replaces them) and
+  delete. Each action opens a dialog; status and terms apply to all selected
+  items or none. The selection is the page on screen (50 items, server cap
+  200). The trash toggle is gone from items (the terms list keeps it).
+- **Filtros** button: one select per taxonomy (a parent includes its
+  children), **Criado em** / **Atualizado em** date ranges, and every custom
+  field the theme opts in. Filters combine and live in the URL.
+
+The theme's part is the opt-in: `"filterable": true` on a field of an item
+type — `select`, `boolean`, `date`, `number` or `item` (an `item` filter lists
+every item of the target type, so use it with a manageable number). Free-text
+types, fields inside `repeater`/`flexible`, and fields of pages, options or
+taxonomies can't be filterable. Nothing else to build.
 
 ## Richtext blocks (v3.9.0+)
 
